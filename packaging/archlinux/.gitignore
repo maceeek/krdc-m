@@ -1,0 +1,5 @@
+/src/
+/pkg/
+/krdc-m/
+*.pkg.tar.*
+*.log

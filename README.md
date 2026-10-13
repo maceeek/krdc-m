@@ -1,3 +1,40 @@
+# KRDC-M
+
+KRDC-M is a fork of [KRDC](https://invent.kde.org/network/krdc), the remote
+desktop client of KDE, based on its 26.08 release (26.08.2). It is the client
+counterpart of [KRdp-M](https://github.com/maceeek/krdp-m), the fork of the RDP
+server of KDE Plasma, and builds as a drop-in replacement of the `krdc`
+package. For Arch Linux and CachyOS see
+[Installing on Arch Linux and CachyOS](#installing-on-arch-linux-and-cachyos).
+
+The code is not changed yet, the fork only adds this file and the packaging.
+KRDC-M uses the system FreeRDP for RDP, so with
+[FreeRDP-M](https://github.com/maceeek/freerdp-m) installed it decodes AV1 with
+NVDEC (`/gfx:AV1`, see the FreeRDP-M README) without a rebuild.
+
+## Installing on Arch Linux and CachyOS
+
+```sh
+cd packaging/archlinux
+makepkg -si
+```
+
+This builds the `main` branch of this repository and replaces `krdc`. Install
+`freerdp-m-git` first (or any `freerdp` 3) for RDP support and `libvncserver`
+for VNC.
+
+## Updating from upstream
+
+The fork is based on the release tags of KRDC:
+
+```sh
+git remote add upstream https://invent.kde.org/network/krdc.git
+git fetch upstream --tags
+git rebase <new tag>
+```
+
+---
+
 # KRDC - KDE Remote Desktop Client
 
 <p align="center">

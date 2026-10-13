@@ -1,0 +1,73 @@
+# Maintainer: KRDC-M contributors
+#
+# Builds KRDC from this repository and replaces the krdc package of Arch Linux /
+# CachyOS. It uses the freerdp package for RDP, so with freerdp-m installed
+# KRDC gets its AV1 decoding.
+#
+#   cd packaging/archlinux && makepkg -si
+#
+# Builds the main branch. To build a different branch, append #branch=<name>
+# to the source below.
+
+pkgname=krdc-m-git
+_name=krdc-m
+pkgver=26.08.2.r0.g0000000
+pkgrel=1
+pkgdesc='KDE remote desktop client for RDP and VNC (fork of KRDC)'
+arch=(x86_64)
+url='https://github.com/maceeek/krdc-m'
+license=(GPL-2.0-or-later LGPL-2.0-or-later)
+depends=(glibc
+         kbookmarks
+         kcmutils
+         kcompletion
+         kconfig
+         kconfigwidgets
+         kcoreaddons
+         kcrash
+         kdnssd
+         kguiaddons
+         ki18n
+         kio
+         knotifyconfig
+         kstatusnotifieritem
+         kwidgetsaddons
+         kxmlgui
+         libssh
+         libstdc++
+         qt6-base
+         qtkeychain-qt6
+         wayland)
+makedepends=(extra-cmake-modules
+             freerdp
+             git
+             kdoctools
+             libvncserver
+             qt6-wayland)
+optdepends=('freerdp: RDP support, freerdp-m adds AV1 decoding with NVDEC'
+            'keditbookmarks: to edit bookmarks'
+            'libvncserver: VNC support')
+provides=("krdc=${pkgver%%.r*}")
+conflicts=(krdc)
+source=("$_name::git+https://github.com/maceeek/krdc-m.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd $_name
+  local version
+  version=$(sed -n 's/^set (RELEASE_SERVICE_VERSION_\(MAJOR\|MINOR\|MICRO\) "\(.*\)")/\2/p' CMakeLists.txt | paste -sd.)
+  printf "%s.r%s.g%s" "$version" "$(git rev-list --count "v$version"..HEAD 2>/dev/null || git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cmake -B build -S $_name \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBEXECDIR=lib \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DBUILD_TESTING=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}
