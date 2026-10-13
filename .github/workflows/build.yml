@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 KRDC-M contributors
+# SPDX-License-Identifier: CC0-1.0
+
+# Builds against the libraries of Arch Linux, which CachyOS is based on.
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  archlinux:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git cmake ninja extra-cmake-modules kdoctools libvncserver \
+            qt6-base qt6-wayland qtkeychain-qt6 libssh kbookmarks kcmutils kcompletion \
+            kconfig kconfigwidgets kcoreaddons kcrash kdnssd kguiaddons ki18n kio \
+            knotifyconfig kstatusnotifieritem kwidgetsaddons kxmlgui wayland
+
+      # KRDC-M needs FreeRDP-M, which replaces the freerdp package of Arch Linux.
+      # Build it with its PKGBUILD, makepkg does not run as root.
+      - name: Build FreeRDP-M
+        run: |
+          useradd --create-home builder
+          install -d -o builder /tmp/freerdp-m
+          curl -fsSL -o /tmp/freerdp-m/PKGBUILD \
+            https://raw.githubusercontent.com/maceeek/freerdp-m/main/packaging/archlinux/PKGBUILD
+          chown builder /tmp/freerdp-m/PKGBUILD
+          cd /tmp/freerdp-m
+          bash -c 'source PKGBUILD && pacman -S --noconfirm --needed "${depends[@]}" "${makedepends[@]}"'
+          su builder -c 'makepkg --nocheck --noconfirm'
+          pacman -U --noconfirm $(ls freerdp-m-git-*.pkg.tar.zst | grep -v -- -debug-)
+
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF
+
+      - name: Build
+        run: cmake --build build
