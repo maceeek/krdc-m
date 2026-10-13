@@ -461,6 +461,9 @@ int RdpSession::clientContextStart(rdpContext *context)
         if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32)) {
             return -1;
         }
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxCodecAV1, false)) {
+            return -1;
+        }
         break;
     case RdpHostPreferences::Acceleration::ForceRemoteFx:
         if (!freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, false)) {
@@ -481,6 +484,9 @@ int RdpSession::clientContextStart(rdpContext *context)
         if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32)) {
             return -1;
         }
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxCodecAV1, false)) {
+            return -1;
+        }
         break;
     case RdpHostPreferences::Acceleration::Disabled:
         if (!freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, false)) {
@@ -496,6 +502,9 @@ int RdpSession::clientContextStart(rdpContext *context)
             return -1;
         }
         if (!freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, false)) {
+            return -1;
+        }
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxCodecAV1, false)) {
             return -1;
         }
         break;
@@ -516,6 +525,10 @@ int RdpSession::clientContextStart(rdpContext *context)
             return -1;
         }
         if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32)) {
+            return -1;
+        }
+        // AV1 of FreeRDP-M, used when the server supports it too, H.264 otherwise.
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxCodecAV1, true)) {
             return -1;
         }
         break;

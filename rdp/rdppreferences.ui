@@ -179,6 +179,9 @@
        </item>
        <item row="3" column="1">
         <widget class="KComboBox" name="kcfg_Acceleration">
+         <property name="whatsThis">
+          <string>With Use Best Available the remote desktop is shown with AV1 when the server supports it (KRdp-M and other servers using FreeRDP-M), decoded by the GPU when it can. Other servers use H.264 or RemoteFX. Force H.264 never uses AV1.</string>
+         </property>
          <property name="sizePolicy">
           <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
            <horstretch>0</horstretch>

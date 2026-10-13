@@ -135,6 +135,26 @@ if(WITH_RDP)
 
     MESSAGE(STATUS "Found FreeRDP version ${FreeRDP_VERSION_MAJOR}.${FreeRDP_VERSION_MINOR}.${FreeRDP_VERSION_REVISION}")
 
+    # KRDC-M is built against FreeRDP-M (https://github.com/maceeek/freerdp-m) with
+    # WITH_GFX_AV1, which decodes AV1 with the GPU.
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_INCLUDES ${FreeRDP_INCLUDE_DIR} ${WinPR_INCLUDE_DIR})
+    set(CMAKE_REQUIRED_LIBRARIES freerdp winpr)
+    # Checked again on every run, the FreeRDP found may have changed.
+    unset(FREERDP_M_FOUND CACHE)
+    check_cxx_source_compiles("
+#include <freerdp/codec/av1.h>
+#if !defined(FREERDP_AV1_HARDWARE_SUPPORT)
+#error FreeRDP without AV1 decoding on the GPU
+#endif
+int main() { freerdp_av1_context_free(freerdp_av1_context_new(FALSE)); return 0; }
+" FREERDP_M_FOUND)
+    unset(CMAKE_REQUIRED_INCLUDES)
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    if (NOT FREERDP_M_FOUND)
+        message(FATAL_ERROR "KRDC-M needs FreeRDP-M built with -DWITH_GFX_AV1=ON, see https://github.com/maceeek/freerdp-m")
+    endif()
+
     set_package_properties(FreeRDP PROPERTIES
         DESCRIPTION "A free Remote Desktop Protocol (RDP) Implementation"
         URL "https://www.freerdp.com/"

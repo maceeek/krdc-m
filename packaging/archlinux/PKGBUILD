@@ -1,8 +1,8 @@
 # Maintainer: KRDC-M contributors
 #
 # Builds KRDC from this repository and replaces the krdc package of Arch Linux /
-# CachyOS. It uses the freerdp package for RDP, so with freerdp-m installed
-# KRDC gets its AV1 decoding.
+# CachyOS. Needs FreeRDP-M for RDP with AV1, install freerdp-m-git from
+# https://github.com/maceeek/freerdp-m first.
 #
 #   cd packaging/archlinux && makepkg -si
 #
@@ -13,11 +13,12 @@ pkgname=krdc-m-git
 _name=krdc-m
 pkgver=26.08.2.r0.g0000000
 pkgrel=1
-pkgdesc='KDE remote desktop client for RDP and VNC (fork of KRDC)'
+pkgdesc='KDE remote desktop client for RDP and VNC, with AV1 (fork of KRDC)'
 arch=(x86_64)
 url='https://github.com/maceeek/krdc-m'
 license=(GPL-2.0-or-later LGPL-2.0-or-later)
-depends=(glibc
+depends=(freerdp-m-git
+         glibc
          kbookmarks
          kcmutils
          kcompletion
@@ -39,13 +40,11 @@ depends=(glibc
          qtkeychain-qt6
          wayland)
 makedepends=(extra-cmake-modules
-             freerdp
              git
              kdoctools
              libvncserver
              qt6-wayland)
-optdepends=('freerdp: RDP support, freerdp-m adds AV1 decoding with NVDEC'
-            'keditbookmarks: to edit bookmarks'
+optdepends=('keditbookmarks: to edit bookmarks'
             'libvncserver: VNC support')
 provides=("krdc=${pkgver%%.r*}")
 conflicts=(krdc)

@@ -7,10 +7,28 @@ server of KDE Plasma, and builds as a drop-in replacement of the `krdc`
 package. For Arch Linux and CachyOS see
 [Installing on Arch Linux and CachyOS](#installing-on-arch-linux-and-cachyos).
 
-The code is not changed yet, the fork only adds this file and the packaging.
-KRDC-M uses the system FreeRDP for RDP, so with
-[FreeRDP-M](https://github.com/maceeek/freerdp-m) installed it decodes AV1 with
-NVDEC (`/gfx:AV1`, see the FreeRDP-M README) without a rebuild.
+KRDC-M is built against [FreeRDP-M](https://github.com/maceeek/freerdp-m), a
+fork of FreeRDP that decodes AV1 with the GPU: NVDEC on NVIDIA GPUs, VAAPI on
+AMD (e.g. Ryzen AI 300 with Radeon 860M) and Intel GPUs, dav1d in software
+otherwise.
+
+## AV1
+
+With *Acceleration* set to *Use Best Available* (the default) in the settings
+of a connection, KRDC-M offers AV1 to the server. AV1 is an extension of
+FreeRDP to the RDP graphics pipeline, so only servers using FreeRDP-M with a
+GPU that encodes AV1 use it, e.g. [KRdp-M](https://github.com/maceeek/krdp-m),
+the RDP server of KDE Plasma. Every other server, e.g. Windows, uses H.264 or
+RemoteFX as with KRDC. *Force H.264* never uses AV1.
+
+Which codec is used shows in the log of FreeRDP:
+
+```sh
+WLOG_FILTER="com.freerdp.channels.rdpgfx.client:DEBUG,com.freerdp.codec.av1:DEBUG" krdc
+```
+
+`RecvCapsConfirmPdu: version: RDPGFX_CAPVERSION_FRDP_1` means AV1, and
+`AV1 decoder: NVDEC` (or `VAAPI`) that the GPU decodes it.
 
 ## Installing on Arch Linux and CachyOS
 
@@ -20,8 +38,8 @@ makepkg -si
 ```
 
 This builds the `main` branch of this repository and replaces `krdc`. Install
-`freerdp-m-git` first (or any `freerdp` 3) for RDP support and `libvncserver`
-for VNC.
+[FreeRDP-M](https://github.com/maceeek/freerdp-m#installing-on-arch-linux-and-cachyos)
+(`freerdp-m-git`) first, and `libvncserver` for VNC.
 
 ## Updating from upstream
 
