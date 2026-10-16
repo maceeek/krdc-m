@@ -34,6 +34,8 @@
 
 #include "krdc_debug.h"
 
+static constexpr DWORD VideoPixelFormat = Q_BYTE_ORDER == Q_LITTLE_ENDIAN ? PIXEL_FORMAT_BGRX32 : PIXEL_FORMAT_XRGB32;
+
 BOOL RdpSession::preConnect(freerdp *rdp)
 {
     WINPR_ASSERT(rdp);
@@ -78,11 +80,11 @@ BOOL RdpSession::postConnect(freerdp *rdp)
     session->setState(State::Connected);
 
     auto &buffer = session->m_videoBuffer;
-    buffer = QImage(freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth),
-                    freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight),
-                    QImage::Format_RGBX8888);
+    buffer =
+        QImage(freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth), freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight), QImage::Format_RGB32);
+    buffer.fill(Qt::black);
 
-    if (!gdi_init_ex(rdp, PIXEL_FORMAT_RGBX32, buffer.bytesPerLine(), buffer.bits(), nullptr)) {
+    if (!gdi_init_ex(rdp, VideoPixelFormat, buffer.bytesPerLine(), buffer.bits(), nullptr)) {
         qCWarning(KRDC) << "Could not initialize GDI subsystem";
         return false;
     }
@@ -92,7 +94,8 @@ BOOL RdpSession::postConnect(freerdp *rdp)
         return false;
     }
 
-    session->m_size = QSize(gdi->width, gdi->height);
+    session->setSize(QSize(gdi->width, gdi->height));
+    session->m_completedFrames.publish(buffer);
     Q_EMIT session->sizeChanged();
 
     ctx->update->EndPaint = endPaint;
@@ -789,7 +792,8 @@ BOOL RdpSession::endPaint(rdpContext *context)
     }
 
     auto rect = QRect{invalid->x, invalid->y, invalid->w, invalid->h};
-    Q_EMIT session->rectangleUpdated(rect, session->m_size);
+    session->m_completedFrames.publish(session->m_videoBuffer);
+    Q_EMIT session->rectangleUpdated(rect, session->size());
     return true;
 }
 
@@ -806,16 +810,21 @@ BOOL RdpSession::resizeDisplay(rdpContext *context)
     WINPR_ASSERT(settings);
 
     auto &buffer = session->m_videoBuffer;
-    buffer = QImage(freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth),
-                    freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight),
-                    QImage::Format_RGBX8888);
+    QImage resized(freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth),
+                   freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight),
+                   QImage::Format_RGB32);
+    resized.fill(Qt::black);
 
-    if (!gdi_resize_ex(gdi, buffer.width(), buffer.height(), buffer.bytesPerLine(), PIXEL_FORMAT_RGBX32, buffer.bits(), nullptr)) {
+    if (!gdi_resize_ex(gdi, resized.width(), resized.height(), resized.bytesPerLine(), VideoPixelFormat, resized.bits(), nullptr)) {
         qCWarning(KRDC) << "Failed resizing GDI subsystem";
         return false;
     }
 
-    session->m_size = buffer.size();
+    // gdi_resize_ex may end an outstanding paint of the old buffer. Keep
+    // that image alive until it switches its retained raw pointer.
+    buffer = std::move(resized);
+    session->m_completedFrames.publish(buffer);
+    session->setSize(buffer.size());
     Q_EMIT session->sizeChanged();
 
     return true;
@@ -965,11 +974,13 @@ void RdpSession::setHostPreferences(RdpHostPreferences *preferences)
 
 QSize RdpSession::size() const
 {
+    std::lock_guard lock(m_sizeMutex);
     return m_size;
 }
 
 void RdpSession::setSize(QSize size)
 {
+    std::lock_guard lock(m_sizeMutex);
     m_size = size;
 }
 
@@ -988,9 +999,9 @@ void RdpSession::stop()
     freerdp_client_stop(m_context.rdp);
 }
 
-const QImage *RdpSession::videoBuffer() const
+QImage RdpSession::videoBuffer() const
 {
-    return &m_videoBuffer;
+    return m_completedFrames.snapshot();
 }
 
 bool RdpSession::sendEvent(QEvent *event, QWidget *source)
@@ -1019,8 +1030,9 @@ bool RdpSession::sendEvent(QEvent *event, QWidget *source)
         auto position = mouseEvent->position();
         auto sourceSize = QSizeF{source->size()};
 
-        auto x = (position.x() / sourceSize.width()) * m_size.width();
-        auto y = (position.y() / sourceSize.height()) * m_size.height();
+        const auto remoteSize = size();
+        auto x = (position.x() / sourceSize.width()) * remoteSize.width();
+        auto y = (position.y() / sourceSize.height()) * remoteSize.height();
 
         bool extendedEvent = false;
         UINT16 flags = 0;
@@ -1096,8 +1108,9 @@ bool RdpSession::sendEvent(QEvent *event, QWidget *source)
         auto position = wheelEvent->position();
         auto sourceSize = QSizeF{source->size()};
 
-        auto x = (position.x() / sourceSize.width()) * m_size.width();
-        auto y = (position.y() / sourceSize.height()) * m_size.height();
+        const auto remoteSize = size();
+        auto x = (position.x() / sourceSize.width()) * remoteSize.width();
+        auto y = (position.y() / sourceSize.height()) * remoteSize.height();
 
         freerdp_input_send_mouse_event(input, flags, uint16_t(x), uint16_t(y));
     }
@@ -1173,25 +1186,19 @@ void RdpSession::run()
         return;
     }
 
-    auto timer = CreateWaitableTimerA(nullptr, FALSE, "rdp-session-timer");
-    if (!timer) {
-        return;
-    }
-
-    LARGE_INTEGER due;
-    due.QuadPart = 0;
-    if (!SetWaitableTimer(timer, &due, 1, nullptr, nullptr, false)) {
-        return;
-    }
-
     setState(State::Running);
 
     HANDLE handles[MAXIMUM_WAIT_OBJECTS] = {};
+    // Only session-lock prevention needs periodic work while completely idle.
+    const DWORD timeout = freerdp_settings_get_uint32(m_context.rdp->settings, FreeRDP_FakeMouseMotionInterval) ? 1000 : INFINITE;
     while (!freerdp_shall_disconnect_context(m_context.rdp)) {
-        handles[0] = timer;
-        auto count = freerdp_get_event_handles(m_context.rdp, &handles[1], ARRAYSIZE(handles) - 1);
+        auto count = freerdp_get_event_handles(m_context.rdp, handles, ARRAYSIZE(handles));
+        if (count == 0) {
+            emitErrorMessage();
+            break;
+        }
 
-        auto status = WaitForMultipleObjects(count, handles, FALSE, INFINITE);
+        auto status = WaitForMultipleObjects(count, handles, FALSE, timeout);
         if (status == WAIT_FAILED) {
             emitErrorMessage();
             break;
@@ -1250,11 +1257,13 @@ void RdpSession::initializeDisplay(RdpContext *krdp, DispClientContext *disp)
     if (!krdp || !disp) {
         return;
     }
+    std::lock_guard lock(m_displayMutex);
     m_display = std::make_unique<RdpDisplay>(krdp, disp);
 }
 
 void RdpSession::destroyDisplay()
 {
+    std::lock_guard lock(m_displayMutex);
     if (m_display) {
         m_display.reset(nullptr);
     }
@@ -1262,6 +1271,7 @@ void RdpSession::destroyDisplay()
 
 bool RdpSession::sendResizeEvent(const QSize newSize)
 {
+    std::lock_guard lock(m_displayMutex);
     if (!m_display) {
         return false;
     }

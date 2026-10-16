@@ -367,8 +367,8 @@ HostPreferences *RdpView::hostPreferences()
 
 QPixmap RdpView::takeScreenshot()
 {
-    if (m_session && !m_session->videoBuffer()->isNull()) {
-        return QPixmap::fromImage(*m_session->videoBuffer());
+    if (m_session) {
+        return QPixmap::fromImage(m_session->videoBuffer());
     }
     return QPixmap{};
 }
@@ -453,24 +453,39 @@ void RdpView::savePassword(const QString &password)
 
 void RdpView::paintEvent(QPaintEvent *event)
 {
-    if (!m_session || m_session->videoBuffer()->isNull()) {
+    if (!m_session) {
+        return;
+    }
+    const auto image = m_session->videoBuffer();
+    if (image.isNull()) {
         return;
     }
 
-    QPainter painter;
-
-    painter.begin(this);
-    painter.setClipRect(event->rect());
-
-    auto image = *m_session->videoBuffer();
-    image.setDevicePixelRatio(devicePixelRatio());
-
-    if (m_hostPreferences->scaleToSize()) {
-        painter.drawImage(QPoint{0, 0}, image.scaled(size() * devicePixelRatio(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    } else {
-        painter.drawImage(QPoint{0, 0}, image);
+    if (!m_renderStatistics.isValid()) {
+        m_renderStatistics.start();
     }
+    QElapsedTimer paintTimer;
+    paintTimer.start();
+    QPainter painter(this);
+    painter.setClipRegion(event->region());
+    QSizeF targetSize = QSizeF(image.size()) / devicePixelRatio();
+    if (m_hostPreferences->scaleToSize()) {
+        targetSize.scale(size(), Qt::KeepAspectRatio);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    }
+    // Scale directly into the backing store. Setting DPR on a shared QImage
+    // or calling image.scaled() would allocate another full frame per paint.
+    painter.drawImage(QRectF(QPointF(), targetSize), image);
     painter.end();
+    m_paintNanoseconds += paintTimer.nsecsElapsed();
+    ++m_paintedFrames;
+    if (m_renderStatistics.elapsed() >= 5000) {
+        qCInfo(KRDC) << "Render stats: paint FPS" << m_paintedFrames * 1000.0 / m_renderStatistics.elapsed() << "mean paint ms"
+                     << m_paintNanoseconds / 1000000.0 / m_paintedFrames << "source" << image.size() << "target" << targetSize << "DPR" << devicePixelRatio();
+        m_renderStatistics.restart();
+        m_paintedFrames = 0;
+        m_paintNanoseconds = 0;
+    }
 }
 
 void RdpView::handleKeyEvent(QKeyEvent *event)
