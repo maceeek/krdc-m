@@ -11,43 +11,7 @@
 
 struct RdpContext;
 
-/* Simple timer implementation: QTimers can only be used with threads started with QThread */
-#include <atomic>
-#include <chrono>
-#include <thread>
-
-class RdpDisplayTimer
-{
-    std::atomic_bool m_running = false;
-
-public:
-    void start(std::function<void(void)> callback)
-    {
-        if (m_running) {
-            return;
-        }
-        m_running = true;
-        std::thread t([&, callback]() {
-            if (!m_running) {
-                return;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            if (!m_running) {
-                return;
-            }
-            callback();
-            m_running = false;
-        });
-        t.detach();
-    }
-
-    void stop()
-    {
-        m_running = false;
-    }
-};
-
-/* Timer implementation end */
+#include "rdpdisplaytimer.h"
 
 class RdpDisplay : public QObject
 {
@@ -66,6 +30,7 @@ private:
     DispClientContext *m_dispctx = nullptr;
     RdpDisplayTimer m_updateTimer;
 
+    std::mutex m_layoutMutex;
     QSize m_lastSize;
     UINT16 m_lastSentDesktopOrientation = 0;
     UINT32 m_lastSentDesktopScaleFactor = 0;

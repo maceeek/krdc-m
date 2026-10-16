@@ -65,3 +65,11 @@ install(TARGETS kcm_krdc_rdpplugin DESTINATION ${KDE_INSTALL_PLUGINDIR}/krdc/kcm
 install(TARGETS krdc_rdpplugin DESTINATION ${KDE_INSTALL_PLUGINDIR}/krdc)
 
 # install(FILES smb2rdc.desktop DESTINATION ${KDE_INSTALL_DATADIR}/kio/servicemenus)
+
+if(BUILD_TESTING)
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Test)
+    add_executable(rdpstreamtest autotests/rdpstreamtest.cpp)
+    target_include_directories(rdpstreamtest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(rdpstreamtest PRIVATE Qt::Test Qt::Gui Threads::Threads)
+    add_test(NAME rdpstreamtest COMMAND rdpstreamtest)
+endif()

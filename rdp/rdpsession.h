@@ -7,7 +7,10 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <thread>
+
+#include "rdpframebuffer.h"
 
 #include <QImage>
 #include <QObject>
@@ -113,7 +116,7 @@ public:
     bool sendResizeEvent(const QSize newSize);
     void setRemoteCursor(const QCursor &cursor);
 
-    const QImage *videoBuffer() const;
+    QImage videoBuffer() const;
 
     Q_SIGNAL void rectangleUpdated(const QRect &rectangle, const QSize &size);
 
@@ -206,7 +209,11 @@ private:
 
     std::thread m_thread;
 
+    // Only the decoding thread touches this working buffer.
     QImage m_videoBuffer;
+    RdpFrameBuffer m_completedFrames;
+    mutable std::mutex m_sizeMutex;
+    std::mutex m_displayMutex;
 
     RdpHostPreferences *m_preferences;
 };

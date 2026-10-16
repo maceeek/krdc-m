@@ -9,6 +9,8 @@
 #ifndef RDPVIEW_H
 #define RDPVIEW_H
 
+#include <QElapsedTimer>
+
 #include "rdpsession.h"
 #include "remoteview.h"
 
@@ -92,6 +94,9 @@ private:
     std::unique_ptr<RdpSession> m_session;
 
     QCursor m_remoteCursor;
+    QElapsedTimer m_renderStatistics;
+    quint64 m_paintedFrames = 0;
+    qint64 m_paintNanoseconds = 0;
 };
 
 #endif

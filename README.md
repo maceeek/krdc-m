@@ -28,7 +28,27 @@ WLOG_FILTER="com.freerdp.channels.rdpgfx.client:DEBUG,com.freerdp.codec.av1:DEBU
 ```
 
 `RecvCapsConfirmPdu: version: RDPGFX_CAPVERSION_FRDP_1` means AV1, and
-`AV1 decoder: NVDEC` (or `VAAPI`) that the GPU decodes it.
+`AV1 decoder: NVDEC (GPU), first picture ...` (or `VAAPI`) confirms that
+the GPU decoded a picture. A `dav1d` decoder message means software decoding;
+CUDA probe failures on AMD alone do not establish which backend was selected.
+
+## Frame delivery and diagnostics
+
+The decoding thread publishes owned, completed frame snapshots. GUI painting
+and screenshots never read the buffer GDI is writing, and retained snapshots
+remain valid across resize. On little-endian systems, the GDI image uses BGRX
+like the graphics surfaces and Qt RGB32, avoiding a full-frame channel swap.
+Scaling is drawn directly into the widget backing store without allocating a
+scaled QImage or detaching a shared image just to change its DPR.
+
+Resize requests are debounced on an owned worker that is cancelled and joined
+when the display closes. The RDP loop waits on all FreeRDP events; it does not
+poll with a 1 ms timer. Session-lock prevention retains an idle timeout.
+
+`Render stats` periodically reports paint FPS, mean paint CPU time, source and
+target size, and DPR. Compare it with the server's `Video stats` and FreeRDP-M's
+AV1 decoder/readback messages. Paint FPS is not a compositor presentation or
+vsync measurement; a static desktop does not produce 60 paints per second.
 
 ## Installing on Arch Linux and CachyOS
 

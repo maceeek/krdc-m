@@ -21,6 +21,7 @@ UINT RdpDisplay::onDisplayControlCaps(DispClientContext *disp, UINT32 maxNumMoni
 
 bool RdpDisplay::sendResizeEvent(const QSize newSize)
 {
+    std::lock_guard lock(m_layoutMutex);
     if (!newSize.isValid() || newSize == m_lastSize) {
         return false;
     }
@@ -33,27 +34,32 @@ bool RdpDisplay::sendResizeEvent(const QSize newSize)
 
 void RdpDisplay::onUpdateTimer()
 {
+    QSize size;
+    {
+        std::lock_guard lock(m_layoutMutex);
+        size = m_lastSize;
+    }
     auto ctx = reinterpret_cast<rdpContext *>(m_krdp);
     WINPR_ASSERT(ctx);
 
     auto settings = ctx->settings;
     WINPR_ASSERT(settings);
 
-    qCDebug(KRDC) << "RDP resize event:" << m_lastSize;
+    qCDebug(KRDC) << "RDP resize event:" << size;
 
     // TODO Multi monitor, orientation and dpi support
 
-    DISPLAY_CONTROL_MONITOR_LAYOUT layout;
+    DISPLAY_CONTROL_MONITOR_LAYOUT layout = {};
     layout.Flags = DISPLAY_CONTROL_MONITOR_PRIMARY;
     layout.Top = 0;
     layout.Left = 0;
-    layout.Width = m_lastSize.width();
-    layout.Height = m_lastSize.height();
+    layout.Width = size.width();
+    layout.Height = size.height();
     layout.Orientation = freerdp_settings_get_uint16(settings, FreeRDP_DesktopOrientation);
     layout.DesktopScaleFactor = freerdp_settings_get_uint32(settings, FreeRDP_DesktopScaleFactor);
     layout.DeviceScaleFactor = freerdp_settings_get_uint32(settings, FreeRDP_DeviceScaleFactor);
-    layout.PhysicalWidth = m_lastSize.width();
-    layout.PhysicalHeight = m_lastSize.height();
+    layout.PhysicalWidth = size.width();
+    layout.PhysicalHeight = size.height();
 
     m_dispctx->SendMonitorLayout(m_dispctx, 1, &layout);
 }
